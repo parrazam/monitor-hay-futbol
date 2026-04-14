@@ -102,6 +102,15 @@ Exit code: ${code}"
 }
 trap 'on_unexpected_error "$LINENO" "$BASH_COMMAND"' ERR
 
+send_heartbeat() {
+    [[ -z "$UPTIME_KUMA_PUSH_URL" ]] && return 0
+    if curl -fsS -o /dev/null --max-time "$CURL_TIMEOUT" "$UPTIME_KUMA_PUSH_URL"; then
+        log "Uptime Kuma: push enviado"
+    else
+        log "WARN: Uptime Kuma push falló"
+    fi
+}
+
 send_mattermost() {
     local message="$1"
     local payload
@@ -199,6 +208,8 @@ CURRENT_RECORD="${LATEST_STATE}"
 
 if [[ "$CURRENT_RECORD" == "$PREV_RECORD" ]]; then
     log "Sin cambios desde la última ejecución (${CURRENT_RECORD}). No se notifica."
+    CURRENT_STEP="push de heartbeat a Uptime Kuma"
+    send_heartbeat
     exit 0
 fi
 
@@ -254,12 +265,6 @@ else
 fi
 
 CURRENT_STEP="push de heartbeat a Uptime Kuma"
-if [[ -n "$UPTIME_KUMA_PUSH_URL" ]]; then
-    if curl -fsS -o /dev/null --max-time "$CURL_TIMEOUT" "$UPTIME_KUMA_PUSH_URL"; then
-        log "Uptime Kuma: push enviado"
-    else
-        log "WARN: Uptime Kuma push falló"
-    fi
-fi
+send_heartbeat
 
 log "Finalizado correctamente."
