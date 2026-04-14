@@ -52,12 +52,55 @@ BLOCK_THRESHOLD_PCT="${BLOCK_THRESHOLD_PCT:-50}"
 # (Opcional) URL de push de Uptime Kuma. Si está definida, se enviará un
 # GET al finalizar la ejecución con éxito como heartbeat.
 UPTIME_KUMA_PUSH_URL="${UPTIME_KUMA_PUSH_URL:-}"
+# (Opcional) URL de Ntfy para notificar fallos del script. Si está definida,
+# se enviará una alerta cuando el script falle indicando el paso y motivo.
+NTFY_URL="${NTFY_URL:-}"
+NTFY_TOKEN="${NTFY_TOKEN:-}"
 
 # ── Funciones ────────────────────────────────────────────────────────────────
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
 }
+
+CURRENT_STEP="inicialización"
+
+send_ntfy() {
+    [[ -z "$NTFY_URL" ]] && return 0
+    local title="$1" body="$2"
+    local auth_args=()
+    [[ -n "$NTFY_TOKEN" ]] && auth_args=(-H "Authorization: Bearer ${NTFY_TOKEN}")
+    curl -fsS -o /dev/null --max-time "$CURL_TIMEOUT" \
+        -H "Title: ${title}" \
+        -H "Priority: high" \
+        -H "Tags: rotating_light" \
+        "${auth_args[@]}" \
+        -d "$body" \
+        "$NTFY_URL" \
+        || log "WARN: no se pudo enviar notificación a Ntfy" >&2
+}
+
+die() {
+    local msg="$1"
+    log "ERROR: $msg" >&2
+    send_ntfy "hayahora_monitor: fallo en '${CURRENT_STEP}'" \
+        "Paso: ${CURRENT_STEP}
+Motivo: ${msg}"
+    exit 1
+}
+
+on_unexpected_error() {
+    local code=$?
+    local line="$1"
+    local cmd="$2"
+    send_ntfy "hayahora_monitor: fallo inesperado en '${CURRENT_STEP}'" \
+        "Paso: ${CURRENT_STEP}
+Línea: ${line}
+Comando: ${cmd}
+Exit code: ${code}"
+    exit "$code"
+}
+trap 'on_unexpected_error "$LINENO" "$BASH_COMMAND"' ERR
 
 send_mattermost() {
     local message="$1"
@@ -85,12 +128,12 @@ send_mattermost() {
 
 # ── Obtener datos de la API ──────────────────────────────────────────────────
 
+CURRENT_STEP="consulta a la API de hayahora.futbol"
 log "Consultando API: ${API_URL}"
 
 API_RESPONSE=$(curl -s --max-time "$CURL_TIMEOUT" -f "$API_URL") || {
-    log "ERROR: No se pudo contactar con la API" >&2
     send_mattermost ":warning: **hayahora_monitor**: No se pudo contactar con la API de hayahora.futbol. ¿Estará bloqueada también?" || true
-    exit 1
+    die "No se pudo contactar con la API (${API_URL})"
 }
 
 # ── Analizar JSON ────────────────────────────────────────────────────────────
@@ -104,6 +147,7 @@ API_RESPONSE=$(curl -s --max-time "$CURL_TIMEOUT" -f "$API_URL") || {
 # cada ISP pasan a true simultáneamente. Las IPs sueltas que quedan en true
 # después son artefactos que no representan un bloqueo real.
 
+CURRENT_STEP="análisis del JSON de la API"
 ISP_STATS=$(echo "$API_RESPONSE" | jq --argjson threshold "$BLOCK_THRESHOLD_PCT" '
     [.data[] | {isp, blocked: (.stateChanges[-1].state)}]
     | group_by(.isp)
@@ -121,8 +165,7 @@ ISP_STATS=$(echo "$API_RESPONSE" | jq --argjson threshold "$BLOCK_THRESHOLD_PCT"
 ')
 
 if [[ -z "$ISP_STATS" || "$ISP_STATS" == "null" ]]; then
-    log "ERROR: No se pudieron extraer datos del JSON" >&2
-    exit 1
+    die "No se pudieron extraer datos del JSON de la API"
 fi
 
 BLOCK_ACTIVE=$(echo "$ISP_STATS" | jq -r '.any_over_threshold')
@@ -146,6 +189,7 @@ log "Bloqueados: ${BLOCKED_COUNT}/${TOTAL_ENTRIES} entradas | Detalle ISPs: ${BL
 # Fichero de estado: una línea con "TIMESTAMP|STATE" del último cambio notificado.
 # Si el timestamp+state actual coincide con el guardado → sin cambios → no notificar.
 
+CURRENT_STEP="detección de cambio de estado"
 PREV_RECORD=""
 if [[ -f "$STATE_FILE" ]]; then
     PREV_RECORD=$(cat "$STATE_FILE" 2>/dev/null || echo "")
@@ -200,15 +244,16 @@ EOF
     log "BLOQUEO FINALIZADO → enviando aviso a Mattermost"
 fi
 
+CURRENT_STEP="envío de notificación a Mattermost"
 if send_mattermost "$MSG"; then
     # Solo guardar estado si el envío fue exitoso (así reintenta en la próxima)
     echo "$CURRENT_RECORD" > "$STATE_FILE"
     log "Estado guardado en ${STATE_FILE}"
 else
-    log "ERROR: No se pudo enviar a Mattermost, no se guarda estado (reintentará)" >&2
-    exit 1
+    die "No se pudo enviar mensaje a Mattermost; no se guarda estado (reintentará en la próxima ejecución)"
 fi
 
+CURRENT_STEP="push de heartbeat a Uptime Kuma"
 if [[ -n "$UPTIME_KUMA_PUSH_URL" ]]; then
     if curl -fsS -o /dev/null --max-time "$CURL_TIMEOUT" "$UPTIME_KUMA_PUSH_URL"; then
         log "Uptime Kuma: push enviado"
