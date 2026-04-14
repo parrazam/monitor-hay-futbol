@@ -49,6 +49,9 @@ STATE_FILE="${STATE_FILE:-${SCRIPT_DIR}/.hayahora_last_state}"
 # Cuando LaLiga bloquea, >90% de las IPs de cada ISP pasan a true simultáneamente.
 # Un umbral de 50% filtra el ruido residual (IPs sueltas que quedan en true).
 BLOCK_THRESHOLD_PCT="${BLOCK_THRESHOLD_PCT:-50}"
+# (Opcional) URL de push de Uptime Kuma. Si está definida, se enviará un
+# GET al finalizar la ejecución con éxito como heartbeat.
+UPTIME_KUMA_PUSH_URL="${UPTIME_KUMA_PUSH_URL:-}"
 
 # ── Funciones ────────────────────────────────────────────────────────────────
 
@@ -204,6 +207,14 @@ if send_mattermost "$MSG"; then
 else
     log "ERROR: No se pudo enviar a Mattermost, no se guarda estado (reintentará)" >&2
     exit 1
+fi
+
+if [[ -n "$UPTIME_KUMA_PUSH_URL" ]]; then
+    if curl -fsS -o /dev/null --max-time "$CURL_TIMEOUT" "$UPTIME_KUMA_PUSH_URL"; then
+        log "Uptime Kuma: push enviado"
+    else
+        log "WARN: Uptime Kuma push falló"
+    fi
 fi
 
 log "Finalizado correctamente."
