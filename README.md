@@ -37,6 +37,9 @@ Variables opcionales:
 | `API_URL` | `https://hayahora.futbol/estado/data.json` | URL de la API |
 | `CURL_TIMEOUT` | `15` | Timeout de curl en segundos |
 | `BLOCK_THRESHOLD_PCT` | `50` | % mínimo de IPs bloqueadas en un ISP para considerar bloqueo real |
+| `UPTIME_KUMA_PUSH_URL` | — | Si se define, se envía un GET como heartbeat al finalizar con éxito (tanto si hay cambios como si no). Entrecomilla el valor si la URL lleva `&`. |
+| `NTFY_URL` | — | Si se define, se envía una notificación a Ntfy cuando el script falla, indicando el paso y el motivo. |
+| `NTFY_TOKEN` | — | Token Bearer opcional para Ntfy si el topic está protegido. |
 
 ## Uso
 
