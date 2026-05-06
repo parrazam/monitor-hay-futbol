@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>hay-futbol — Monitor de bloqueos de LaLiga</title>
+  <meta name="description" content="Script bash que monitoriza los bloqueos de LaLiga via la API de hayahora.futbol y notifica en Mattermost cuando el estado cambia.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green:  #16a34a;
+      --green-light: #dcfce7;
+      --red:    #dc2626;
+      --red-light: #fee2e2;
+      --gray-50:  #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-600: #4b5563;
+      --gray-700: #374151;
+      --gray-900: #111827;
+      --code-bg:  #1e293b;
+      --code-fg:  #e2e8f0;
+      --accent:   #2563eb;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      color: var(--gray-700);
+      background: #fff;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Header ── */
+    header {
+      background: var(--gray-900);
+      color: #fff;
+      padding: 3.5rem 1.5rem 3rem;
+      text-align: center;
+    }
+    header .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      background: var(--green);
+      color: #fff;
+      font-size: .75rem;
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      padding: .25rem .65rem;
+      border-radius: 9999px;
+      margin-bottom: 1.25rem;
+    }
+    header h1 {
+      font-size: 2.5rem;
+      font-weight: 800;
+      letter-spacing: -.03em;
+      margin-bottom: .5rem;
+    }
+    header h1 span { color: #4ade80; }
+    header p {
+      font-size: 1.1rem;
+      color: #9ca3af;
+      max-width: 560px;
+      margin: 0 auto 1.75rem;
+    }
+    .header-links {
+      display: flex;
+      gap: .75rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      padding: .55rem 1.2rem;
+      border-radius: .5rem;
+      font-size: .9rem;
+      font-weight: 600;
+      transition: opacity .15s;
+    }
+    .btn:hover { opacity: .85; text-decoration: none; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-secondary { background: #374151; color: #f9fafb; }
+
+    /* ── Main layout ── */
+    main {
+      max-width: 840px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem 5rem;
+    }
+
+    section { margin-bottom: 3rem; }
+
+    h2 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--gray-900);
+      margin-bottom: 1rem;
+      padding-bottom: .4rem;
+      border-bottom: 2px solid var(--gray-200);
+    }
+    h3 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--gray-700);
+      margin: 1.5rem 0 .6rem;
+    }
+
+    p { margin-bottom: .9rem; }
+    p:last-child { margin-bottom: 0; }
+
+    /* ── Cómo funciona (steps) ── */
+    .steps {
+      display: grid;
+      gap: .75rem;
+      counter-reset: step;
+    }
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+      border-radius: .75rem;
+      padding: 1rem 1.25rem;
+    }
+    .step::before {
+      counter-increment: step;
+      content: counter(step);
+      min-width: 2rem;
+      height: 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--gray-900);
+      color: #fff;
+      font-weight: 700;
+      font-size: .85rem;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .step-text strong { display: block; margin-bottom: .15rem; color: var(--gray-900); }
+    .step-text span { font-size: .9rem; color: var(--gray-600); }
+
+    /* ── Umbral callout ── */
+    .callout {
+      background: var(--gray-50);
+      border-left: 4px solid var(--accent);
+      border-radius: 0 .5rem .5rem 0;
+      padding: .9rem 1.1rem;
+      font-size: .92rem;
+      color: var(--gray-700);
+      margin: 1rem 0;
+    }
+    .callout code { background: var(--gray-200); padding: .1em .35em; border-radius: .25rem; font-size: .88em; }
+
+    /* ── Notificaciones ejemplo ── */
+    .notif-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-top: .5rem;
+    }
+    @media (max-width: 560px) { .notif-grid { grid-template-columns: 1fr; } }
+    .notif-card {
+      border: 1px solid var(--gray-200);
+      border-radius: .75rem;
+      padding: 1.1rem 1.25rem;
+      font-size: .88rem;
+    }
+    .notif-card.bloqueo { border-top: 3px solid var(--red); background: var(--red-light); }
+    .notif-card.libre   { border-top: 3px solid var(--green); background: var(--green-light); }
+    .notif-card .label {
+      font-size: .75rem;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      margin-bottom: .5rem;
+    }
+    .notif-card.bloqueo .label { color: var(--red); }
+    .notif-card.libre   .label { color: var(--green); }
+    .notif-card p { font-size: .88rem; color: var(--gray-700); }
+
+    /* ── Tablas ── */
+    .table-wrap { overflow-x: auto; margin: .5rem 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .9rem;
+    }
+    th {
+      background: var(--gray-100);
+      text-align: left;
+      padding: .55rem .85rem;
+      font-weight: 600;
+      color: var(--gray-900);
+      border: 1px solid var(--gray-200);
+    }
+    td {
+      padding: .55rem .85rem;
+      border: 1px solid var(--gray-200);
+      vertical-align: top;
+    }
+    tr:nth-child(even) td { background: var(--gray-50); }
+    td code, th code { font-size: .85em; background: var(--gray-200); padding: .1em .35em; border-radius: .25rem; }
+
+    /* ── Code blocks ── */
+    pre {
+      background: var(--code-bg);
+      color: var(--code-fg);
+      padding: 1.1rem 1.3rem;
+      border-radius: .65rem;
+      overflow-x: auto;
+      font-size: .875rem;
+      line-height: 1.7;
+      margin: .75rem 0;
+    }
+    code { font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace; }
+
+    /* ── Observabilidad ── */
+    .obs-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-top: .5rem;
+    }
+    @media (max-width: 560px) { .obs-grid { grid-template-columns: 1fr; } }
+    .obs-card {
+      border: 1px solid var(--gray-200);
+      border-radius: .75rem;
+      padding: 1.1rem 1.25rem;
+    }
+    .obs-card h3 { margin-top: 0; font-size: .95rem; }
+    .obs-card p { font-size: .88rem; color: var(--gray-600); }
+
+    /* ── Requisitos ── */
+    .req-list {
+      display: flex;
+      gap: .6rem;
+      flex-wrap: wrap;
+      margin: .5rem 0;
+    }
+    .req-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: .3rem;
+      background: var(--gray-100);
+      border: 1px solid var(--gray-200);
+      border-radius: 9999px;
+      padding: .3rem .85rem;
+      font-size: .88rem;
+      font-weight: 600;
+      color: var(--gray-900);
+    }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 2rem 1.5rem;
+      font-size: .85rem;
+      color: #9ca3af;
+      border-top: 1px solid var(--gray-200);
+    }
+    footer a { color: #6b7280; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="badge">⚽ Anti-censura LaLiga</div>
+  <h1>hay-<span>futbol</span></h1>
+  <p>Monitor de bloqueos de LaLiga que notifica en Mattermost cuando Internet vuelve a ser libre.</p>
+  <div class="header-links">
+    <a class="btn btn-primary" href="https://github.com/parrazam/hay-futbol">
+      ★ Ver en GitHub
+    </a>
+    <a class="btn btn-secondary" href="https://hayahora.futbol">
+      hayahora.futbol ↗
+    </a>
+  </div>
+</header>
+
+<main>
+
+  <section>
+    <h2>Qué hace</h2>
+    <p>
+      Cada vez que se ejecuta (típicamente desde cron cada 2-5 minutos), consulta la API de
+      <a href="https://hayahora.futbol" target="_blank">hayahora.futbol</a>, determina si LaLiga tiene
+      activo el bloqueo de IPs y envía una notificación a Mattermost <strong>solo cuando el estado cambia</strong>.
+      Así no hay spam: un mensaje cuando empieza el bloqueo y otro cuando termina.
+    </p>
+
+    <div class="notif-grid">
+      <div class="notif-card bloqueo">
+        <div class="label">🚨 Bloqueo activo</div>
+        <p><strong>¡HAY FÚTBOL! LaLiga está censurando Internet</strong><br>
+        Se han detectado bloqueos activos en las IPs monitorizadas. Si no puedes acceder a alguna web, prueba con una VPN.</p>
+      </div>
+      <div class="notif-card libre">
+        <div class="label">✅ Internet libre</div>
+        <p><strong>Se acabó el fútbol — Internet libre de nuevo</strong><br>
+        Los bloqueos de LaLiga han cesado. Puedes navegar tranquilamente.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Cómo funciona</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-text">
+          <strong>Consulta la API</strong>
+          <span>Hace un GET a <code>https://hayahora.futbol/estado/data.json</code> con timeout configurable.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-text">
+          <strong>Calcula la proporción por ISP</strong>
+          <span>Para cada ISP, cuenta el % de IPs cuyo último <code>stateChange</code> tiene <code>state == true</code>.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-text">
+          <strong>Aplica el umbral</strong>
+          <span>Si algún ISP supera el <code>BLOCK_THRESHOLD_PCT</code> (50% por defecto), se considera bloqueo activo. Las IPs residuales sueltas no disparan alarmas.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-text">
+          <strong>Detecta cambio de estado</strong>
+          <span>Compara el estado actual con el guardado en <code>.hayahora_last_state</code>. Si es igual, termina sin notificar.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-text">
+          <strong>Notifica en Mattermost</strong>
+          <span>Solo si hay cambio, publica el mensaje con el detalle de ISPs afectados y actualiza el fichero de estado.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout">
+      Cuando LaLiga activa el bloqueo, <strong>&gt;90% de las IPs</strong> de cada ISP cambian simultáneamente.
+      El umbral del <code>50%</code> filtra el ruido residual de IPs que permanecen bloqueadas entre partidos.
+    </div>
+  </section>
+
+  <section>
+    <h2>Instalación rápida</h2>
+
+    <h3>Requisitos</h3>
+    <div class="req-list">
+      <span class="req-pill">bash</span>
+      <span class="req-pill">curl</span>
+      <span class="req-pill">jq</span>
+    </div>
+
+    <h3>Configuración</h3>
+<pre><code># 1. Clona el repositorio
+git clone https://github.com/parrazam/hay-futbol.git
+cd hay-futbol
+
+# 2. Crea tu .env a partir de la plantilla
+cp env.example .env
+# Edita .env con los datos de tu Mattermost
+
+# 3. Prueba que funciona
+bash hayahora_monitor.sh</code></pre>
+
+    <h3>Cron (cada 3 minutos)</h3>
+<pre><code>*/3 * * * * /ruta/a/hayahora_monitor.sh >> /var/log/hayahora.log 2>&1</code></pre>
+  </section>
+
+  <section>
+    <h2>Configuración</h2>
+
+    <h3>Variables requeridas</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Variable</th><th>Descripción</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>MATTERMOST_URL</code></td><td>URL base de tu instancia de Mattermost (sin <code>/</code> final)</td></tr>
+          <tr><td><code>MATTERMOST_TOKEN</code></td><td>Token de bot o token personal con permisos para publicar</td></tr>
+          <tr><td><code>MATTERMOST_CHANNEL_ID</code></td><td>ID interno del canal donde publicar (no el nombre)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Variables opcionales</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Variable</th><th>Default</th><th>Descripción</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>API_URL</code></td><td><em>hayahora.futbol/…</em></td><td>URL de la API de estado</td></tr>
+          <tr><td><code>CURL_TIMEOUT</code></td><td><code>15</code></td><td>Timeout de curl en segundos</td></tr>
+          <tr><td><code>BLOCK_THRESHOLD_PCT</code></td><td><code>50</code></td><td>% mínimo de IPs bloqueadas en un ISP para considerar bloqueo real</td></tr>
+          <tr><td><code>UPTIME_KUMA_PUSH_URL</code></td><td>—</td><td>Heartbeat a Uptime Kuma al finalizar con éxito. Entrecomilla el valor si la URL lleva <code>&amp;</code>.</td></tr>
+          <tr><td><code>NTFY_URL</code></td><td>—</td><td>Notificación a Ntfy cuando el script falla (indica el paso y motivo)</td></tr>
+          <tr><td><code>NTFY_TOKEN</code></td><td>—</td><td>Token Bearer para Ntfy si el topic está protegido</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Observabilidad</h2>
+    <div class="obs-grid">
+      <div class="obs-card">
+        <h3>Uptime Kuma</h3>
+        <p>
+          Si defines <code>UPTIME_KUMA_PUSH_URL</code>, el script hace un GET a esa URL al terminar con éxito
+          — tanto si hubo cambio de estado como si no. Así Kuma recibe el heartbeat en cada ejecución y
+          puede alertarte si el script deja de correr.
+        </p>
+      </div>
+      <div class="obs-card">
+        <h3>Ntfy</h3>
+        <p>
+          Si defines <code>NTFY_URL</code>, cualquier fallo inesperado del script dispara una notificación
+          con el paso en el que falló (<code>CURRENT_STEP</code>), el motivo, la línea y el comando.
+          Opcional: protege tu topic con <code>NTFY_TOKEN</code>.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Tests</h2>
+    <p>
+      El proyecto incluye tests de integración que levantan servidores HTTP mock (API + Mattermost)
+      con Python y verifican las transiciones de estado. No necesitan credenciales reales.
+    </p>
+<pre><code>bash test_hayahora_monitor.sh</code></pre>
+  </section>
+
+</main>
+
+<footer>
+  <p>
+    <a href="https://github.com/parrazam/hay-futbol" target="_blank">hay-futbol</a>
+    · Datos de bloqueo via <a href="https://hayahora.futbol" target="_blank">hayahora.futbol</a>
+  </p>
+</footer>
+
+</body>
+</html>
