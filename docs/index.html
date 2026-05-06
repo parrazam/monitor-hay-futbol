@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -689,9 +690,9 @@
   <div class="container">
     <div class="logo">hay-<span>futbol</span></div>
     <div class="nav-links">
-      <a class="nav-link" href="#como-funciona">Cómo funciona</a>
+      <a class="nav-link" href="#notificaciones">Notificaciones</a>
       <a class="nav-link" href="#instalacion">Instalación</a>
-      <a class="nav-link" href="#configuracion">Configuración</a>
+      <a class="nav-link" href="#observabilidad">Observabilidad</a>
       <a class="nav-gh" href="https://github.com/parrazam/monitor-hay-futbol" target="_blank" rel="noopener">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
         GitHub
@@ -727,32 +728,10 @@
         </a>
       </div>
 
-      <div class="terminal-preview">
-        <div class="terminal-header">
-          <div class="terminal-dots">
-            <span class="terminal-dot"></span>
-            <span class="terminal-dot"></span>
-            <span class="terminal-dot"></span>
-          </div>
-          <span class="terminal-title">~/scripts — hayahora_monitor.sh</span>
-        </div>
-        <div class="terminal-body">
-<span class="term-prompt">$</span> <span class="term-cmd">./hayahora_monitor.sh</span>
-<span class="term-out">[2026-05-06 21:42:11] Consultando API: <span class="term-info">https://hayahora.futbol/estado/data.json</span></span>
-<span class="term-out">[2026-05-06 21:42:12] Umbral: <span class="term-info">50%</span> | Bloqueo activo: <span class="term-bad">true</span></span>
-<span class="term-out">[2026-05-06 21:42:12] Bloqueados: <span class="term-warn">42/48</span> entradas</span>
-<span class="term-out">[2026-05-06 21:42:12] ¡Cambio detectado! <span class="term-info">false</span> → <span class="term-bad">true</span></span>
-<span class="term-out">[2026-05-06 21:42:12] BLOQUEO ACTIVO → enviando alerta a Mattermost</span>
-<span class="term-out">[2026-05-06 21:42:13] Mattermost: mensaje enviado <span class="term-ok">(HTTP 201)</span></span>
-<span class="term-out">[2026-05-06 21:42:13] Uptime Kuma: push enviado</span>
-<span class="term-out">[2026-05-06 21:42:13] <span class="term-ok">Finalizado correctamente.</span></span>
-        </div>
-      </div>
-
     </div>
   </section>
 
-  <section>
+  <section id="notificaciones">
     <div class="container">
       <span class="eyebrow">Notificaciones</span>
       <h2>Avisa solo cuando importa</h2>
@@ -788,63 +767,6 @@
     </div>
   </section>
 
-  <section id="como-funciona">
-    <div class="container">
-      <span class="eyebrow">Cómo funciona</span>
-      <h2>Detección por proporción</h2>
-      <p class="section-intro">
-        Cuando LaLiga activa el bloqueo, más del 90% de las IPs de cada ISP cambian a la vez.
-        El script aprovecha ese patrón en lugar de contar IPs sueltas.
-      </p>
-
-      <div class="steps">
-        <div class="step">
-          <div class="step-num"></div>
-          <div class="step-content">
-            <h3>Consulta la API</h3>
-            <p>GET a <code>hayahora.futbol/estado/data.json</code> con timeout configurable.</p>
-          </div>
-        </div>
-        <div class="step">
-          <div class="step-num"></div>
-          <div class="step-content">
-            <h3>Calcula la proporción por ISP</h3>
-            <p>Para cada ISP, cuenta el % de IPs cuyo último <code>stateChange</code> tiene <code>state == true</code>.</p>
-          </div>
-        </div>
-        <div class="step">
-          <div class="step-num"></div>
-          <div class="step-content">
-            <h3>Aplica el umbral</h3>
-            <p>Si algún ISP supera <code>BLOCK_THRESHOLD_PCT</code> (50% por defecto), se considera bloqueo activo. Las IPs residuales sueltas no disparan alarmas.</p>
-          </div>
-        </div>
-        <div class="step">
-          <div class="step-num"></div>
-          <div class="step-content">
-            <h3>Detecta cambio de estado</h3>
-            <p>Compara el estado actual con el guardado en <code>.hayahora_last_state</code>. Si es igual, termina sin notificar.</p>
-          </div>
-        </div>
-        <div class="step">
-          <div class="step-num"></div>
-          <div class="step-content">
-            <h3>Notifica en Mattermost</h3>
-            <p>Solo si hay cambio, publica el mensaje con el detalle de ISPs afectados y actualiza el fichero de estado.</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="callout">
-        <div class="callout-icon">💡</div>
-        <div>
-          Con el umbral del <code>50%</code>, las IPs sueltas que quedan en <code>true</code> entre partidos
-          se filtran como ruido. <strong>Solo se considera bloqueo</strong> cuando un ISP entero pasa al modo censura.
-        </div>
-      </div>
-    </div>
-  </section>
-
   <section id="instalacion">
     <div class="container">
       <span class="eyebrow">Instalación</span>
@@ -875,60 +797,10 @@
 <span class="c-cmd">bash</span> hayahora_monitor.sh</code></pre>
       </div>
 
-      <h3 class="subsection">Programar con cron (cada 3 minutos)</h3>
-      <div class="code-block">
-        <div class="code-block-header">crontab</div>
-        <pre><code><span class="c-flag">*/3 * * * *</span> <span class="c-str">/ruta/a/hayahora_monitor.sh</span> &gt;&gt; <span class="c-str">/var/log/hayahora.log</span> 2&gt;&amp;1</code></pre>
-      </div>
     </div>
   </section>
 
-  <section id="configuracion">
-    <div class="container">
-      <span class="eyebrow">Configuración</span>
-      <h2>Variables del .env</h2>
-      <p class="section-intro">
-        Tres variables obligatorias para Mattermost y un puñado de opcionales para ajustar el comportamiento y la observabilidad.
-      </p>
-
-      <h3 class="subsection">Requeridas</h3>
-      <div class="table-wrap">
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr><th>Variable</th><th>Descripción</th></tr>
-            </thead>
-            <tbody>
-              <tr><td><code>MATTERMOST_URL</code></td><td>URL base de tu instancia (sin <code>/</code> final)</td></tr>
-              <tr><td><code>MATTERMOST_TOKEN</code></td><td>Token de bot o token personal con permisos para publicar</td></tr>
-              <tr><td><code>MATTERMOST_CHANNEL_ID</code></td><td>ID interno del canal donde publicar (no el nombre)</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <h3 class="subsection">Opcionales</h3>
-      <div class="table-wrap">
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr><th>Variable</th><th>Default</th><th>Descripción</th></tr>
-            </thead>
-            <tbody>
-              <tr><td><code>API_URL</code></td><td><em>hayahora.futbol/…</em></td><td>URL de la API de estado</td></tr>
-              <tr><td><code>CURL_TIMEOUT</code></td><td><code>15</code></td><td>Timeout de curl en segundos</td></tr>
-              <tr><td><code>BLOCK_THRESHOLD_PCT</code></td><td><code>50</code></td><td>% mínimo de IPs bloqueadas en un ISP para considerar bloqueo real</td></tr>
-              <tr><td><code>UPTIME_KUMA_PUSH_URL</code></td><td>—</td><td>Heartbeat a Uptime Kuma al finalizar con éxito. Entrecomilla la URL si lleva <code>&amp;</code></td></tr>
-              <tr><td><code>NTFY_URL</code></td><td>—</td><td>Notificación a Ntfy cuando el script falla, con paso y motivo</td></tr>
-              <tr><td><code>NTFY_TOKEN</code></td><td>—</td><td>Token Bearer para Ntfy si el topic está protegido</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section>
+  <section id="observabilidad">
     <div class="container">
       <span class="eyebrow">Observabilidad</span>
       <h2>¿Y si el script falla?</h2>
@@ -943,8 +815,8 @@
           </div>
           <h3>Uptime Kuma</h3>
           <p>
-            Si defines <code>UPTIME_KUMA_PUSH_URL</code>, el script hace un GET a esa URL al terminar con éxito —
-            tanto si hubo cambio como si no. Kuma recibe heartbeat en cada ejecución y puede alertarte si el cron deja de correr.
+            Conecta el monitor con Uptime Kuma para recibir un latido en cada ejecución. Si el cron deja
+            de correr, te enteras al instante.
           </p>
         </div>
         <div class="feature-card">
@@ -953,29 +825,14 @@
           </div>
           <h3>Ntfy</h3>
           <p>
-            Si defines <code>NTFY_URL</code>, cualquier fallo inesperado dispara una notificación con el paso
-            (<code>CURRENT_STEP</code>), el motivo, la línea y el comando. Protege el topic con <code>NTFY_TOKEN</code> si quieres.
+            Si algo se rompe, te llega una notificación push a Ntfy con el paso exacto donde falló
+            y el motivo. Sin sorpresas silenciosas.
           </p>
         </div>
       </div>
     </div>
   </section>
 
-  <section>
-    <div class="container">
-      <span class="eyebrow">Tests</span>
-      <h2>Sin credenciales reales</h2>
-      <p class="section-intro">
-        El proyecto incluye tests de integración que levantan servidores HTTP mock con Python (API + Mattermost)
-        y verifican las transiciones de estado en local.
-      </p>
-
-      <div class="code-block">
-        <div class="code-block-header">bash</div>
-        <pre><code><span class="c-prompt">$</span> <span class="c-cmd">bash</span> test_hayahora_monitor.sh</code></pre>
-      </div>
-    </div>
-  </section>
 
 </main>
 
