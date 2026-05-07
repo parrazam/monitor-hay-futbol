@@ -318,6 +318,51 @@ else
 fi
 echo ""
 
+# ── Test 11: JSON malformado (sin .data) → Ntfy con error rico ──────────────
+echo "── Test 11: JSON sin .data → Ntfy recibe error de jq + muestra ──"
+cat > "${WORK_DIR}/api_malformed.json" <<'JSON'
+{"error":"service unavailable","details":"db down"}
+JSON
+
+PORT_BASE=$((PORT_BASE + 2))
+API_PORT=$PORT_BASE
+MM_PORT=$((PORT_BASE + 1))
+NTFY_PORT=$((PORT_BASE + 2))
+
+T="${WORK_DIR}/t11"; mkdir -p "$T"
+cp "$MONITOR_SCRIPT" "$T/hayahora_monitor.sh"; chmod +x "$T/hayahora_monitor.sh"
+MM_BODY_FILE="${T}/mm_body.txt"
+NTFY_BODY_FILE="${T}/ntfy_body.txt"
+T_STATE_FILE="${T}/.hayahora_last_state"
+
+cat > "$T/.env" <<ENV
+MATTERMOST_URL=http://127.0.0.1:${MM_PORT}
+MATTERMOST_TOKEN=test-tok
+MATTERMOST_CHANNEL_ID=ch-test
+API_URL=http://127.0.0.1:${API_PORT}
+CURL_TIMEOUT=5
+STATE_FILE=${T_STATE_FILE}
+NTFY_URL=http://127.0.0.1:${NTFY_PORT}/mi-topic
+NTFY_TOKEN=secreto123
+ENV
+
+start_mock_api "${WORK_DIR}/api_malformed.json" "$API_PORT"
+start_mock_mm "$MM_BODY_FILE" "$MM_PORT"
+start_mock_ntfy "$NTFY_BODY_FILE" "$NTFY_PORT"
+sleep 0.4
+
+if OUTPUT=$("$T/hayahora_monitor.sh" 2>&1); then
+    echo "  ✗ Debería haber fallado al analizar JSON sin .data"; FAILED=$((FAILED+1))
+else
+    echo "  ✓ El script falló como se esperaba"; PASSED=$((PASSED+1))
+fi
+sleep 0.3
+
+assert_file_contains "$NTFY_BODY_FILE" "análisis del JSON" "Ntfy incluye el paso 'análisis del JSON'"
+assert_file_contains "$NTFY_BODY_FILE" "payload inesperado" "Ntfy incluye el mensaje de error de jq capturado"
+assert_file_contains "$NTFY_BODY_FILE" "service unavailable" "Ntfy incluye muestra de la respuesta cruda"
+echo ""
+
 echo "========================================"
 printf " Resultados: %d pasados, %d fallidos\n" "$PASSED" "$FAILED"
 echo "========================================"

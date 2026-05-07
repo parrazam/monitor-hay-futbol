@@ -157,8 +157,14 @@ API_RESPONSE=$(curl -s --max-time "$CURL_TIMEOUT" -f "$API_URL") || {
 # después son artefactos que no representan un bloqueo real.
 
 CURRENT_STEP="análisis del JSON de la API"
-ISP_STATS=$(echo "$API_RESPONSE" | jq --argjson threshold "$BLOCK_THRESHOLD_PCT" '
-    [.data[] | {isp, blocked: (.stateChanges[-1].state)}]
+JQ_STDERR=$(mktemp)
+trap 'rm -f "$JQ_STDERR"' EXIT
+
+if ! ISP_STATS=$(echo "$API_RESPONSE" | jq --argjson threshold "$BLOCK_THRESHOLD_PCT" '
+    if (.data | type) != "array" then
+        error("payload inesperado: .data no es un array (type=\(.data | type))")
+    else . end
+    | [.data[] | {isp, blocked: (.stateChanges[-1].state // false)}]
     | group_by(.isp)
     | map({
         isp: .[0].isp,
@@ -171,7 +177,11 @@ ISP_STATS=$(echo "$API_RESPONSE" | jq --argjson threshold "$BLOCK_THRESHOLD_PCT"
         any_over_threshold: (any(.[]; .pct >= $threshold)),
         blocked_isps_over: [.[] | select(.pct >= $threshold) | .isp]
       }
-')
+' 2>"$JQ_STDERR"); then
+    JQ_ERR=$(<"$JQ_STDERR")
+    SAMPLE=$(printf '%s' "$API_RESPONSE" | head -c 300)
+    die "jq falló analizando el JSON de la API. Error: ${JQ_ERR}. Muestra (300B): ${SAMPLE}"
+fi
 
 if [[ -z "$ISP_STATS" || "$ISP_STATS" == "null" ]]; then
     die "No se pudieron extraer datos del JSON de la API"
